@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Countdown Timer & Alarm Clock</title>
+  <style>
+    :root{--bg:#0f1724;--card:#0b1220;--accent:#7c3aed;--muted:#9aa4b2}
+    *{box-sizing:border-box;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Roboto,"Helvetica Neue",Arial}
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,#071029 0%,#08122a 60%);color:#e6eef8}
+    .wrap{width:960px;max-width:95%;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+    .card{background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);padding:20px;border-radius:14px;box-shadow:0 8px 30px rgba(2,6,23,0.6);}
+    h1{font-size:18px;margin:0 0 12px}
+    label{display:block;font-size:13px;margin-bottom:6px;color:var(--muted)}
+    input[type=time],input[type=number],select{width:100%;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:inherit}
+    .timer-display{font-size:44px;font-weight:700;text-align:center;margin:12px 0}
+    .controls{display:flex;gap:8px;flex-wrap:wrap}
+    button{cursor:pointer;padding:10px 14px;border-radius:10px;border:none;background:var(--accent);color:white;font-weight:600}
+    button.ghost{background:transparent;border:1px solid rgba(255,255,255,0.06)}
+    .small{font-size:12px;padding:8px}
+    .muted{color:var(--muted);font-size:13px}
+    .center{display:flex;align-items:center;justify-content:center}
+    .flex{display:flex;gap:8px}
+    .form-row{margin-bottom:12px}
+    footer{grid-column:1/-1;margin-top:8px;color:var(--muted);font-size:13px;text-align:center}
+    @media (max-width:700px){.wrap{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="card">
+      <h1>Countdown Timer</h1>
+      <div class="form-row">
+        <label>Minutes</label>
+        <input id="minutes" type="number" min="0" value="0">
+      </div>
+      <div class="form-row">
+        <label>Seconds</label>
+        <input id="seconds" type="number" min="0" max="59" value="30">
+      </div>
+      <div class="timer-display" id="countdownDisplay">00:30</div>
+      <div class="controls">
+        <button id="startBtn">Start</button>
+        <button id="pauseBtn" class="ghost">Pause</button>
+        <button id="resetBtn" class="ghost">Reset</button>
+        <button id="add30" class="small ghost">+30s</button>
+        <button id="sub30" class="small ghost">-30s</button>
+      </div>
+      <p class="muted" style="margin-top:12px">When the timer reaches 0 it will play an alarm sound. You can also stop the alarm manually.</p>
+    </section>
+
+    <section class="card">
+      <h1>Alarm Clock</h1>
+      <div class="form-row">
+        <label>Set alarm time (24-hour)</label>
+        <input id="alarmTime" type="time">
+      </div>
+      <div class="form-row">
+        <label>Repeat</label>
+        <select id="alarmRepeat">
+          <option value="once">Once</option>
+          <option value="daily">Daily</option>
+        </select>
+      </div>
+      <div class="center">
+        <div style="text-align:center">
+          <div class="muted">Alarm status</div>
+          <div id="alarmStatus" style="font-weight:700;margin-top:6px">Inactive</div>
+        </div>
+      </div>
+      <div class="controls" style="margin-top:12px">
+        <button id="setAlarmBtn">Set Alarm</button>
+        <button id="clearAlarmBtn" class="ghost">Clear Alarm</button>
+        <button id="stopAlarmBtn" class="ghost">Stop Playing</button>
+      </div>
+      <p class="muted" style="margin-top:12px">If your browser blocks autoplay, you may need to interact with the page (click) to enable sound.</p>
+    </section>
+
+    <footer>Built with HTML, CSS & JavaScript — uses WebAudio for alarm tone (no external files).</footer>
+  </div>
+
+  <script>
+    // --- Countdown Timer Logic ---
+    const minutesInput = document.getElementById('minutes');
+    const secondsInput = document.getElementById('seconds');
+    const display = document.getElementById('countdownDisplay');
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    const add30 = document.getElementById('add30');
+    const sub30 = document.getElementById('sub30');
+
+    let countdown = 0; // in seconds
+    let remaining = 0;
+    let timerInterval = null;
+    let isPaused = false;
+
+    function updateDisplay(secs){
+      const m = Math.floor(secs/60).toString().padStart(2,'0');
+      const s = Math.floor(secs%60).toString().padStart(2,'0');
+      display.textContent = `${m}:${s}`;
+    }
+
+    function readInputsToSeconds(){
+      const m = Math.max(0, parseInt(minutesInput.value || 0));
+      let s = Math.max(0, parseInt(secondsInput.value || 0));
+      if(s>59) s = 59;
+      return m*60 + s;
+    }
+
+    function startCountdown(){
+      if(timerInterval) return; // already running
+      if(remaining <= 0) {
+        countdown = readInputsToSeconds();
+        remaining = countdown;
+      }
+      if(remaining <= 0) return;
+      isPaused = false;
+      startBtn.disabled = true;
+      pauseBtn.disabled = false;
+      resetBtn.disabled = false;
+      timerInterval = setInterval(()=>{
+        remaining -= 1;
+        updateDisplay(remaining);
+        if(remaining <= 0){
+          clearInterval(timerInterval);
+          timerInterval = null;
+          startBtn.disabled = false;
+          pauseBtn.disabled = true;
+          playAlarm();
+        }
+      },1000);
+    }
+
+    function pauseCountdown(){
+      if(timerInterval){
+        clearInterval(timerInterval);
+        timerInterval = null;
+        isPaused = true;
+        startBtn.disabled = false;
+        pauseBtn.disabled = true;
+      }
+    }
+
+    function resetCountdown(){
+      if(timerInterval){clearInterval(timerInterval);timerInterval=null}
+      countdown = readInputsToSeconds();
+      remaining = countdown;
+      updateDisplay(remaining);
+      startBtn.disabled = false;
+      pauseBtn.disabled = true;
+    }
+
+    add30.addEventListener('click', ()=>{ remaining = Math.max(0,(remaining||readInputsToSeconds()) + 30); updateDisplay(remaining); });
+    sub30.addEventListener('click', ()=>{ remaining = Math.max(0,(remaining||readInputsToSeconds()) - 30); updateDisplay(remaining); });
+    startBtn.addEventListener('click', startCountdown);
+    pauseBtn.addEventListener('click', pauseCountdown);
+    resetBtn.addEventListener('click', resetCountdown);
+
+    // initialize
+    countdown = readInputsToSeconds();
+    remaining = countdown;
+    updateDisplay(remaining);
+    pauseBtn.disabled = true;
+
+    // --- Alarm Clock Logic ---
+    const alarmInput = document.getElementById('alarmTime');
+    const setAlarmBtn = document.getElementById('setAlarmBtn');
+    const clearAlarmBtn = document.getElementById('clearAlarmBtn');
+    const alarmStatus = document.getElementById('alarmStatus');
+    const stopAlarmBtn = document.getElementById('stopAlarmBtn');
+    const alarmRepeat = document.getElementById('alarmRepeat');
+
+    let alarmTime = null; // string HH:MM
+    let alarmTimer = null;
+    let audioPlaying = false;
+
+    function setAlarm(){
+      const val = alarmInput.value;
+      if(!val){ alert('Please pick a time for the alarm'); return }
+      alarmTime = val;
+      alarmStatus.textContent = `Set for ${alarmTime} (${alarmRepeat.value})`;
+      scheduleAlarm();
+    }
+
+    function clearAlarm(){
+      if(alarmTimer){ clearTimeout(alarmTimer); alarmTimer = null; }
+      alarmTime = null;
+      alarmStatus.textContent = 'Inactive';
+    }
+
+    function scheduleAlarm(){
+      if(!alarmTime) return;
+      if(alarmTimer) clearTimeout(alarmTimer);
+      const now = new Date();
+      const [hh,mm] = alarmTime.split(':').map(n=>parseInt(n,10));
+      const alarmDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), hh, mm, 0, 0);
+      if(alarmDate <= now){
+        // if time already passed for today, schedule for tomorrow
+        alarmDate.setDate(alarmDate.getDate() + 1);
+      }
+      const ms = alarmDate - now;
+      alarmTimer = setTimeout(()=>{
+        playAlarm();
+        if(alarmRepeat.value === 'daily'){
+          scheduleAlarm(); // schedule next day
+        } else {
+          clearAlarm();
+        }
+      }, ms);
+      // update status with absolute time
+      alarmStatus.textContent = `Set for ${alarmDate.toLocaleString()}`;
+    }
+
+    // keep alarm schedule accurate across time edits and page active state
+    setInterval(()=>{
+      if(alarmTime && !alarmTimer){ scheduleAlarm(); }
+    }, 60_000);
+
+    setAlarmBtn.addEventListener('click', ()=>{ setAlarm(); });
+    clearAlarmBtn.addEventListener('click', ()=>{ clearAlarm(); });
+
+    // --- WebAudio alarm tone generator ---
+    let audioCtx = null;
+    let alarmOsc = null;
+    let alarmGain = null;
+
+    function ensureAudioCtx(){
+      if(!audioCtx){
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function playAlarm(){
+      if(audioPlaying) return;
+      ensureAudioCtx();
+      alarmOsc = audioCtx.createOscillator();
+      alarmGain = audioCtx.createGain();
+      alarmOsc.type = 'sine';
+      alarmOsc.frequency.value = 880;
+      alarmGain.gain.value = 0.0001;
+      alarmOsc.connect(alarmGain).connect(audioCtx.destination);
+      alarmOsc.start();
+      // ramp up
+      alarmGain.gain.exponentialRampToValueAtTime(0.6, audioCtx.currentTime + 0.8);
+      // vibrato effect using setInterval
+      let t=0;
+      const vib = setInterval(()=>{
+        if(!alarmOsc) { clearInterval(vib); return }
+        alarmOsc.frequency.value = 720 + Math.sin(t/5)*200 + (Math.random()*100);
+        t++;
+      }, 120);
+      audioPlaying = true;
+      stopAlarmBtn.disabled = false;
+
+      // auto stop after 2 minutes
+      setTimeout(()=>{ if(audioPlaying) stopAlarm(); clearInterval(vib); }, 120_000);
+    }
+
+    function stopAlarm(){
+      if(!audioPlaying) return;
+      if(alarmGain){
+        alarmGain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.6);
+      }
+      if(alarmOsc){
+        setTimeout(()=>{ try{ alarmOsc.stop(); alarmOsc.disconnect(); }catch(e){} alarmOsc=null; alarmGain=null; }, 700);
+      }
+      audioPlaying = false;
+      stopAlarmBtn.disabled = true;
+    }
+
+    stopAlarmBtn.addEventListener('click', stopAlarm);
+
+    // allow clicking anywhere to resume audio context in some browsers
+    document.body.addEventListener('click', ()=>{ if(audioCtx && audioCtx.state === 'suspended'){ audioCtx.resume(); } });
+
+    // Accessibility: update countdown display when inputs change
+    minutesInput.addEventListener('change', ()=>{ if(!timerInterval){ countdown = readInputsToSeconds(); remaining = countdown; updateDisplay(remaining); } });
+    secondsInput.addEventListener('change', ()=>{ if(!timerInterval){ countdown = readInputsToSeconds(); remaining = countdown; updateDisplay(remaining); } });
+
+    // keyboard shortcuts
+    window.addEventListener('keydown', (e)=>{
+      if(e.key === ' '){ e.preventDefault(); if(timerInterval) pauseCountdown(); else startCountdown(); }
+      if(e.key === 'r') resetCountdown();
+    });
+  </script>
+</body>
+</html>
